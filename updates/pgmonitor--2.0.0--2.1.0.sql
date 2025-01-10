@@ -1,3 +1,8 @@
+
+-- TODO preserve privileges
+
+DROP MATERIALIZED VIEW @extschema@.ccp_table_size;
+
 CREATE FUNCTION @extschema@.ccp_replication_slots() RETURNS TABLE
 (
     slot_name name
@@ -46,8 +51,6 @@ END
 $function$;
 
 
-END
-$function$;
 CREATE OR REPLACE VIEW @extschema@.ccp_replication_slots AS
     SELECT slot_name
         , active
@@ -58,3 +61,15 @@ CREATE OR REPLACE VIEW @extschema@.ccp_replication_slots AS
         , failover
         , synced
     FROM @extschema@.ccp_replication_slots();
+
+
+CREATE MATERIALIZED VIEW @extschema@.ccp_table_size AS
+    SELECT current_database() as dbname
+    , n.nspname as schemaname
+    , c.relname
+    , pg_total_relation_size(c.oid) as bytes
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+    WHERE NOT pg_is_other_temp_schema(n.oid)
+    AND relkind IN ('r', 'm', 'f');
+
