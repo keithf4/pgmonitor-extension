@@ -1,3 +1,16 @@
+2.1.0
+=====
+
+FEATURES
+--------
+ - Add additional metrics for monitoring replication slot status. For PG16+, monitor slot type and for conflicts. For PG17+, monitor synced and failover status.
+
+
+BUGFIXES
+--------
+ - Rename the column in the view `ccp_table_size` from `size_bytes` to just `bytes`. Allows for the underlying metric in the pgMonitor project to be more consistent with the metric name (`ccp_table_size_bytes` vs `ccp_table_size_size_bytes`). Also makes it consistent with other size measurement column names.
+
+
 2.0.0
 =====
 

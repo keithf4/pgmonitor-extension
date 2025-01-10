@@ -35,7 +35,7 @@ CREATE MATERIALIZED VIEW @extschema@.ccp_table_size AS
     SELECT current_database() as dbname
     , n.nspname as schemaname
     , c.relname
-    , pg_total_relation_size(c.oid) as size_bytes
+    , pg_total_relation_size(c.oid) as bytes
     FROM pg_catalog.pg_class c
     JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
     WHERE NOT pg_is_other_temp_schema(n.oid)

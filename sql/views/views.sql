@@ -176,7 +176,15 @@ VALUES (
 
 -- Did not make as a matview since this is a critical metric to avoid disk fill
 CREATE VIEW @extschema@.ccp_replication_slots AS
-    SELECT slot_name, active::int, pg_wal_lsn_diff(CASE WHEN pg_is_in_recovery() THEN pg_last_wal_replay_lsn() ELSE pg_current_wal_insert_lsn() END, restart_lsn) AS retained_bytes FROM pg_catalog.pg_replication_slots;
+    SELECT slot_name
+        , active
+        , retained_bytes
+        , database
+        , slot_type
+        , conflicting
+        , failover
+        , synced
+    FROM @extschema@.ccp_replication_slots();
 INSERT INTO @extschema@.metric_views (
     view_name
     , materialized_view
@@ -250,7 +258,7 @@ VALUES (
     , 'global');
 
 
--- Enabling this metric this view will reset the pg_stat_statements statistics based on
+-- Enabling this metric view will reset the pg_stat_statements statistics based on
 --   the run_interval set in metric_views
 CREATE VIEW @extschema@.ccp_pg_stat_statements_reset AS
     SELECT @extschema@.pg_stat_statements_reset_info() AS time;
