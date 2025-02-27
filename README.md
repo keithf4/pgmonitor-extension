@@ -55,28 +55,51 @@ Log into PostgreSQL and run the following commands. Schema is optional (but reco
 
 ### Metric configuration
 
-The names of all views and materialized views are stored in the `metric_views` configuration table. The extension itself does not touch normal views as part of any maintenance; they are stored together with the materialized views so that external scrape tools can more easily find all view based metrics in one table.
+The names of all normal views are stored in `metric_views`. All metrics that are either normal views or have the option to be backed by either a normal view or materialized view are stored here. If a metric is only backed by a materialized view and has no option for a normal view, it will only be stored in `metrics_matviews`.
 ```
-                              Table "pgmonitor_ext.metric_views"
-       Column       |           Type           | Collation | Nullable |        Default  
---------------------+--------------------------+-----------+----------+-----------------------
- view_schema        | text                     |           | not null | 'pgmonitor_ext'::text
- view_name          | text                     |           | not null |
- materialized_view  | boolean                  |           | not null | true
- concurrent_refresh | boolean                  |           | not null | true
- run_interval       | interval                 |           | not null | '00:10:00'::interval
- last_run           | timestamp with time zone |           |          |
- last_run_time      | interval                 |           |          |
- active             | boolean                  |           | not null | true
- scope              | text                     |           | not null | 'global'::text
+                   Table "pgmonitor_ext.metric_views"
+     Column     |  Type   | Collation | Nullable |        Default        
+----------------+---------+-----------+----------+-----------------------
+ view_schema    | text    |           | not null | 'pgmonitor_ext'::text
+ view_name      | text    |           | not null | 
+ matview_source | boolean |           | not null | false
+ active         | boolean |           | not null | true
+ scope          | text    |           | not null | 'global'::text
+Indexes:
 ```
 
  - `view_schema`
     - Schema containing the view_name
  - `view_name`
     - Name of the view or materialized view in system catalogs
- - `materialized_view`
-    - Boolean to set whether the view is materalized. Defaults to true. If false, this is a normal view and it is not touched as part of any refresh operations by this extension
+ - `matview_source`
+    - Boolean to set whether the metric view is backed by a materialized view. Defaults to false. If true, the view must be defined in a way that allows a choice to be made. Example: built in metrics use a function-backed view that checks this flag.
+ - `active`
+    - Boolean that external monitoring tools can use to determine whether this metric is actively used or not
+ - `scope`
+    - Valid values are "global" or "database"
+    - "global" means the values of this metric are the same on every database in the instance (ex. connections, replication, etc)
+    - "database" means the values of this metric are only defined on a per database basis (database and table statisics, bloat, etc)
+    - Can be used by external scrape tools to be able to determine whether to collect these metrics only once per PostgreSQL instance or once per database inside that instance
+
+Materialized views are stored in the `metric_matviews` configuration table. The background worker uses this table to determine which materialized views are "active" to be refreshed and how often to refresh them.
+```
+                            Table "pgmonitor_ext.metric_matviews"
+       Column       |           Type           | Collation | Nullable |        Default        
+--------------------+--------------------------+-----------+----------+-----------------------
+ view_schema        | text                     |           | not null | 'pgmonitor_ext'::text
+ view_name          | text                     |           | not null | 
+ concurrent_refresh | boolean                  |           | not null | true
+ run_interval       | interval                 |           | not null | '00:14:00'::interval
+ last_run           | timestamp with time zone |           |          | 
+ last_run_time      | interval                 |           |          | 
+ active             | boolean                  |           | not null | true
+ scope              | text                     |           | not null | 'global'::text
+```
+ - `view_schema`
+    - Schema containing the view_name
+ - `view_name`
+    - Name of the view or materialized view in system catalogs
  - `concurrent_refresh`
     - Boolean to set whether the materalized view can be refreshed concurrently. It is highly recommended that all matviews be written in a manner to support a unique key. Concurrent refreshes avoid any contention while metrics are being scraped by external tools.
  - `run_interval`
@@ -86,15 +109,12 @@ The names of all views and materialized views are stored in the `metric_views` c
  - `last_run_time`
     - How long the last run of this refresh took
  - `active`
-    - If view_name is a materalized view, determines whether it should be refreshed as part of automatic maintenance
-    - Both matviews and normal views can also set this to be false as a means of allowing external scrape tools to ignore them
+    - Boolean to determine whether this materialized view is refreshed as part of automatic maintenance. Defaults to true. If false, this matview will not be refreshed automatically.
  - `scope`
-    - Valid values are "global" or "database"
-    - "global" means the values of this metric are the same on every database in the instance (ex. connections, replication, etc)
-    - "database" means the values of this metric are only defined on a per database basis (database and table statisics, bloat, etc)
-    - Can be used by external scrape tools to be able to determine whether to collect these metrics only once per PostgreSQL instance or once per database inside that instance
+    - See `metric_views` for the purpose of this column
 
-For metrics that still require storage of results for fast scraping but cannot use a materialized view, it is also possible to use a table and give pgMonitor an SQL statement to run to refresh that table. For example, the included pgBackRest metrics need to use a function that uses a COPY statement.
+
+For metrics that still require storage of results for fast scraping but cannot use a normal or materialized view, it is also possible to use a table and give pgMonitor an SQL statement to run to refresh that table. For example, the included pgBackRest metrics need to use a function that uses a COPY statement.
 ```
                              Table "pgmonitor_ext.metric_tables"
       Column       |           Type           | Collation | Nullable |        Default  
@@ -115,62 +135,81 @@ For metrics that still require storage of results for fast scraping but cannot u
     - Name of the table in system catalogs
  - `refresh_statement`
     - The full SQL statement that is run to refresh the data in `table_name`. Ex: `SELECT pgmonitor_ext.pgbackrest_info()`
- - See `metric_views` for purpose of remaining columns
+ - `active`
+    - Boolean to determin whether maintenance will call the refresh_statement as part of regular maintenance. If false, this refresh will not run.
+ - See `metric_matviews` for purpose of remaining columns
 
 NORMAL VIEWS:
 ```
-ccp_archive_command_status
-ccp_backrest_last_diff_backup
-ccp_backrest_last_full_backup
-ccp_backrest_last_incr_backup
-ccp_backrest_last_info
-ccp_backrest_oldest_full_backup
-ccp_connection_stats
-ccp_data_checksum_failure
-ccp_is_in_recovery
-ccp_locks
-ccp_postgresql_version
-ccp_postmaster_runtime
-ccp_postmaster_uptime
-ccp_replication_lag
-ccp_replication_lag_size
-ccp_replication_slots
-ccp_settings_pending_restart
-ccp_stat_bgwriter
-ccp_stat_checkpointer
-ccp_stat_io_bgwriter
-ccp_pg_stat_statements_reset
-ccp_transaction_wraparound
-ccp_wal_activity
+ ccp_archive_command_status
+ ccp_backrest_last_diff_backup
+ ccp_backrest_last_full_backup
+ ccp_backrest_last_incr_backup
+ ccp_backrest_last_info
+ ccp_backrest_oldest_full_backup
+ ccp_connection_stats
+ ccp_database_size
+ ccp_data_checksum_failure
+ ccp_locks
+ ccp_pg_is_in_recovery
+ ccp_postgresql_version
+ ccp_postmaster_runtime
+ ccp_postmaster_uptime
+ ccp_replication_lag
+ ccp_replication_lag_size
+ ccp_replication_slots
+ ccp_settings_pending_restart
+ ccp_stat_bgwriter
+ ccp_stat_checkpointer
+ ccp_stat_database
+ ccp_stat_io_bgwriter
+ ccp_stat_user_tables
+ ccp_table_size
+ ccp_transaction_wraparound
+ ccp_wal_activity
+
 ```
 
 MAT VIEWS:
 ```
-ccp_database_size
-ccp_pg_hba_checksum
-ccp_pg_settings_checksum
-ccp_sequence_exhaustion
-ccp_stat_database
-ccp_stat_user_tables
-ccp_table_size
+ ccp_database_size_matview
+ ccp_pg_hba_checksum
+ ccp_pg_settings_checksum
+ ccp_sequence_exhaustion
+ ccp_stat_user_tables_matview
+ ccp_table_size_matview
 ```
 
 TABLES:
 ```
-pg_hba_checksum
-pg_settings_checksum
-pg_stat_statements_reset_info
-pgbackrest_info
+ metric_matviews
+ metric_tables
+ metric_views
+ pgbackrest_info
+ pg_hba_checksum
+ pg_settings_checksum
+ pg_stat_statements_reset_info
 ```
 FUNCTIONS:
 ```
-pg_hba_checksum(p_known_hba_hash text DEFAULT NULL)
-pg_hba_checksum_set_valid() RETURNS smallint
-pg_settings_checksum(p_known_settings_hash text DEFAULT NULL)
-pg_settings_checksum_set_valid() RETURNS smallint
-pg_stat_statements_reset_info(p_throttle_minutes integer DEFAULT 1440)
-sequence_exhaustion(p_percent integer DEFAULT 75, OUT count bigint)
-sequence_status() RETURNS TABLE (sequence_name text, last_value bigint, slots numeric, used numeric, percent int, cycle boolean, numleft numeric, table_usage text)  
+ ccp_database_size_view_choice() RETURNS TABLE
+ ccp_replication_slots_func() RETURNS TABLE
+ ccp_stat_checkpointer_func() RETURNS TABLE
+ ccp_stat_io_bgwriter_func() RETURNS TABLE
+ ccp_stat_user_tables_func() RETURNS TABLE
+ ccp_stat_user_tables_view_choice() RETURNS TABLE
+ ccp_table_size_view_choice() RETURNS TABLE
+ pgbackrest_info() RETURNS SETOF pgbackrest_info
+ pg_settings_checksum_set_valid() RETURNS smallint
+ pg_hba_checksum_set_valid() RETURNS smallint
+ pg_hba_checksum(p_known_hba_hash text DEFAULT NULL)
+ pg_settings_checksum_set_valid() RETURNS smallint
+ pg_settings_checksum(p_known_settings_hash text DEFAULT NULL)
+ pg_stat_statements_func() RETURNS TABLE
+ pg_stat_statements_reset_info() RETURNS bigint
+ refresh_metrics_legacy (p_object_schema text DEFAULT 'monitor', p_object_name text DEFAULT NULL) RETURNS void
+ sequence_exhaustion (p_percent integer DEFAULT 75, OUT count bigint)
+ sequence_status() RETURNS TABLE (sequence_name text, last_value bigint, slots numeric, used numeric, percent int, cycle boolean, numleft numeric, table_usage text)
 ```
 PROCEDURE:
 ```
