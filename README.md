@@ -109,7 +109,7 @@ Materialized views are stored in the `metric_matviews` configuration table. The 
  - `last_run_time`
     - How long the last run of this refresh took
  - `active`
-    - Boolean to determine whether this materialized view is refreshed as part of automatic maintenance. Defaults to true. If false, this matview will not be refreshed automatically.
+    - Boolean to determine whether this materialized view is refreshed as part of automatic maintenance. If false, this matview will not be refreshed automatically. Defaults to true. 
  - `scope`
     - See `metric_views` for the purpose of this column
 

@@ -8,7 +8,7 @@ FEATURES
         - For `ccp_stat_user_tables`, it is possible to have these stats pull from a materialzed view instead if desired in case of performance issues on PostgreSQL instances with very large numbers of tables. 
     - `ccp_stat_database` shouldn't have performance issues and didn't really need a materialized view. It will now only have a normal view available in pgMonitor.
     - `ccp_database_size` and `ccp_table_size` still default to being backed by materialized views since these values should not vary on replicas. But users now have the choice to have these be backed by a normal view. A normal view is not recommended if the database is expected to grow very large in size.
-    - All remaining materialized view backed metrics only have the option for being matview backed. Please see the updated table in the documentation to see which metrics are backed by views, materialized views or have the choice of either. 
+    - All remaining materialized view backed metrics only have the option for being materialized view backed. Please see the updated table in the documentation to see which metrics are backed by views, materialized views, or have the choice of either. 
  - New configuration table for materialized views: `metrics_matviews`
     - All materialized views that were in `metric_views` have been moved to this new table
     - Configuration columns that were only relevant to materialized views have been removed from `metric_views`
