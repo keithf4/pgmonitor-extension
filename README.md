@@ -73,7 +73,7 @@ Indexes:
  - `view_name`
     - Name of the view or materialized view in system catalogs
  - `matview_source`
-    - Boolean to set whether the metric view is backed by a materialized view. Defaults to false. If true, the view must be defined in a way that allows a choice to be made. Example: built in metrics use a function-backed view that checks this flag.
+    - Boolean to set whether the metric view is backed by a materialized view. If true, the view must be defined in a way that allows a choice to be made. Example: built in metrics use a function-backed view that checks this flag. Defaults to false. 
  - `active`
     - Boolean that external monitoring tools can use to determine whether this metric is actively used or not
  - `scope`
