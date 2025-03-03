@@ -1,23 +1,41 @@
-CREATE TABLE @extschema@.metric_views (
+CREATE TABLE @extschema@.metric_matviews (
     view_schema text NOT NULL DEFAULT '@extschema@'
     , view_name text NOT NULL
-    , materialized_view boolean NOT NULL DEFAULT true
     , concurrent_refresh boolean NOT NULL DEFAULT true
     , run_interval interval NOT NULL DEFAULT '10 minutes'::interval
     , last_run timestamptz
     , last_run_time interval
     , active boolean NOT NULL DEFAULT true
     , scope text NOT NULL default 'global'
+    , CONSTRAINT metric_matviews_pk PRIMARY KEY (view_schema, view_name)
+    , CONSTRAINT metric_matviews_scope_ck CHECK (scope IN ('global', 'database'))
+);
+CREATE INDEX metric_matviews_active ON @extschema@.metric_matviews (active);
+SELECT pg_catalog.pg_extension_config_dump('metric_matviews', '');
+ALTER TABLE @extschema@.metric_matviews SET (
+    autovacuum_analyze_scale_factor = 0
+    , autovacuum_vacuum_scale_factor = 0
+    , autovacuum_vacuum_threshold = 10
+    , autovacuum_analyze_threshold = 10);
+
+
+CREATE TABLE @extschema@.metric_views (
+    view_schema text NOT NULL DEFAULT '@extschema@'
+    , view_name text NOT NULL
+    , matview_source boolean NOT NULL DEFAULT false
+    , active boolean NOT NULL DEFAULT true
+    , scope text NOT NULL default 'global'
     , CONSTRAINT metric_views_pk PRIMARY KEY (view_schema, view_name)
     , CONSTRAINT metric_views_scope_ck CHECK (scope IN ('global', 'database'))
 );
-CREATE INDEX metric_views_active_matview ON @extschema@.metric_views (active, materialized_view);
+CREATE INDEX metric_views_active ON @extschema@.metric_views (active);
 SELECT pg_catalog.pg_extension_config_dump('metric_views', '');
 ALTER TABLE @extschema@.metric_views SET (
     autovacuum_analyze_scale_factor = 0
     , autovacuum_vacuum_scale_factor = 0
     , autovacuum_vacuum_threshold = 10
     , autovacuum_analyze_threshold = 10);
+
 
 CREATE TABLE @extschema@.metric_tables (
     table_schema text NOT NULL DEFAULT '@extschema@'
@@ -41,20 +59,6 @@ ALTER TABLE @extschema@.metric_tables SET (
  * Tables and functions for monitoring changes to pg_settings and pg_hba_file_rules system catalogs.
  * Tables allow recording of existing settings so they can be referred back to to see what changed
  */
-CREATE TABLE @extschema@.pg_settings_checksum (
-    settings_hash_generated text NOT NULL
-    , settings_hash_known_provided text
-    , settings_string text NOT NULL
-    , created_at timestamptz DEFAULT now() NOT NULL
-    , valid smallint NOT NULL );
-COMMENT ON COLUMN @extschema@.pg_settings_checksum.valid IS 'Set this column to zero if this group of settings is a valid change';
-CREATE INDEX ON @extschema@.pg_settings_checksum (created_at);
-ALTER TABLE @extschema@.pg_settings_checksum SET (
-    autovacuum_analyze_scale_factor = 0
-    , autovacuum_vacuum_scale_factor = 0
-    , autovacuum_vacuum_threshold = 10
-    , autovacuum_analyze_threshold = 10);
-
 CREATE TABLE @extschema@.pg_hba_checksum (
     hba_hash_generated text NOT NULL
     , hba_hash_known_provided text
@@ -69,6 +73,19 @@ ALTER TABLE @extschema@.pg_hba_checksum SET (
     , autovacuum_vacuum_threshold = 10
     , autovacuum_analyze_threshold = 10);
 
+CREATE TABLE @extschema@.pg_settings_checksum (
+    settings_hash_generated text NOT NULL
+    , settings_hash_known_provided text
+    , settings_string text NOT NULL
+    , created_at timestamptz DEFAULT now() NOT NULL
+    , valid smallint NOT NULL );
+COMMENT ON COLUMN @extschema@.pg_settings_checksum.valid IS 'Set this column to zero if this group of settings is a valid change';
+CREATE INDEX ON @extschema@.pg_settings_checksum (created_at);
+ALTER TABLE @extschema@.pg_settings_checksum SET (
+    autovacuum_analyze_scale_factor = 0
+    , autovacuum_vacuum_scale_factor = 0
+    , autovacuum_vacuum_threshold = 10
+    , autovacuum_analyze_threshold = 10);
 
 CREATE TABLE @extschema@.pg_stat_statements_reset_info(
    reset_time timestamptz
@@ -95,7 +112,8 @@ VALUES (
     , 'SELECT @extschema@.pgbackrest_info()'
     , '10 minutes'
     , false
-);
+)
+ON CONFLICT DO NOTHING;
 
 
 --TODO create prometheus metrics table to match columns to Prometheus output formatting info. better table name?

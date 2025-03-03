@@ -1,6 +1,7 @@
-CREATE PROCEDURE @extschema@.refresh_metrics (p_object_schema text DEFAULT 'monitor', p_object_name text DEFAULT NULL)
+CREATE FUNCTION @extschema@.refresh_metrics_legacy (p_object_schema text DEFAULT 'monitor', p_object_name text DEFAULT NULL)
+    RETURNS void
     LANGUAGE plpgsql
-    AS $$
+    AS $function$
 DECLARE
 
 v_adv_lock                      boolean;
@@ -13,6 +14,9 @@ v_start_runtime                 timestamptz;
 v_stop_runtime                  timestamptz;
 
 BEGIN
+/*
+ * Function version of refresh_metrics() procedure for PG versions less than 14 that cannot be called via BGW
+ */
 
 IF pg_catalog.pg_is_in_recovery() = TRUE THEN
     RAISE DEBUG 'Database instance in recovery mode. Exiting without view refresh';
@@ -26,14 +30,14 @@ IF v_adv_lock = false THEN
 END IF;
 
 v_loop_sql := format('SELECT view_schema, view_name, concurrent_refresh
-                        FROM @extschema@.metric_views
+                        FROM @extschema@.metric_matviews
                         WHERE active
-                        AND materialized_view
                         AND ( last_run IS NULL OR (CURRENT_TIMESTAMP - last_run) > run_interval )');
 
 IF p_object_name IS NOT NULL THEN
     v_loop_sql := format('%s AND view_schema = %L AND view_name = %L', v_loop_sql, p_object_schema, p_object_name);
 END IF;
+
 
 FOR v_row IN EXECUTE v_loop_sql LOOP
 
@@ -56,7 +60,6 @@ FOR v_row IN EXECUTE v_loop_sql LOOP
     WHERE view_schema = v_row.view_schema
     AND view_name = v_row.view_name;
 
-    COMMIT;
 END LOOP;
 
 v_loop_sql := format('SELECT table_schema, table_name, refresh_statement
@@ -84,10 +87,10 @@ FOR v_row IN EXECUTE v_loop_sql LOOP
     WHERE table_schema = v_row.table_schema
     AND table_name = v_row.table_name;
 
-    COMMIT;
 END LOOP;
 
 PERFORM pg_catalog.pg_advisory_unlock(hashtext('pgmonitor refresh call'));
 
+RETURN;
 END
-$$;
+$function$;
