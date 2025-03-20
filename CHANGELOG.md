@@ -23,6 +23,7 @@ BUGFIXES
 --------
  - Rename the column in the view `ccp_table_size` from `size_bytes` to just `bytes`. Allows for the underlying metric in the pgMonitor project to be more consistent with the metric name (`ccp_table_size_bytes` vs `ccp_table_size_size_bytes`). Also makes it consistent with other size measurement column names.
  - Allow pg_stat_statements to be installed in any user defined schema if those metrics are being used.
+ - Removed the pgBackRest metric `repo_total_size_bytes` from the `ccp_backrest_last_info` view. When block incremental backups are enabled it is no longer possible to gather this metric from the pgBackRest info output. Since this is often enabled now, this metric is no longer regularly available.
 
 
 2.0.0

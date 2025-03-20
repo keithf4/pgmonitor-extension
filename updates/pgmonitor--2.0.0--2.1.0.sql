@@ -53,9 +53,23 @@ JOIN aclstuff a ON a.grantee = r.oid
 WHERE r.rolname != 'PUBLIC'
 GROUP BY rolname;
 
+INSERT INTO pgmonitor_preserve_privs_temp
+WITH aclstuff AS (
+    SELECT (aclexplode(relacl)).grantee AS grantee, (aclexplode(relacl)).privilege_type AS privilege_type
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+    WHERE c.relname = 'ccp_backrest_last_info'
+    AND n.nspname = '@extschema@')
+SELECT format('GRANT %s ON TABLE %I.%I TO %I;', string_agg(a.privilege_type, ','), '@extschema@', 'ccp_backrest_last_info',  r.rolname)
+FROM pg_catalog.pg_roles r
+JOIN aclstuff a ON a.grantee = r.oid
+WHERE r.rolname != 'PUBLIC'
+GROUP BY rolname;
+
 DROP MATERIALIZED VIEW @extschema@.ccp_table_size;
 DROP MATERIALIZED VIEW @extschema@.ccp_database_size;
 DROP MATERIALIZED VIEW @extschema@.ccp_stat_database;
+DROP VIEW @extschema@.ccp_backrest_last_info;
 ALTER FUNCTION @extschema@.ccp_stat_checkpointer() RENAME TO ccp_stat_checkpointer_func;
 ALTER FUNCTION @extschema@.ccp_stat_io_bgwriter() RENAME TO ccp_stat_io_bgwriter_func;
 
@@ -863,6 +877,46 @@ PERFORM pg_catalog.pg_advisory_unlock(hashtext('pgmonitor refresh call'));
 RETURN;
 END
 $function$;
+
+
+CREATE VIEW @extschema@.ccp_backrest_last_info AS
+    WITH all_backups AS (
+      SELECT config_file
+       , jsonb_array_elements(data) AS stanza_data
+      FROM @extschema@.pgbackrest_info
+    )
+    , per_stanza AS (
+      SELECT config_file
+       , stanza_data->>'name' AS stanza
+       , jsonb_array_elements(stanza_data->'backup') AS backup_data
+      FROM all_backups
+    )
+    SELECT a.config_file
+    , a.stanza
+    , split_part(a.backup_data->'backrest'->>'version', '.', 1) || lpad(split_part(a.backup_data->'backrest'->>'version', '.', 2), 2, '0') || lpad(coalesce(nullif(split_part(a.backup_data->'backrest'->>'version', '.', 3), ''), '00'), 2, '0') AS backrest_repo_version
+    , a.backup_data->'database'->>'repo-key' AS repo
+    , a.backup_data->>'type' AS backup_type
+    , a.backup_data->'info'->'repository'->>'delta' AS repo_backup_size_bytes
+    , (a.backup_data->'timestamp'->>'stop')::bigint - (a.backup_data->'timestamp'->>'start')::bigint AS backup_runtime_seconds
+    , CASE
+       WHEN a.backup_data->>'error' = 'true' THEN 1
+       ELSE 0
+     END AS backup_error
+    FROM per_stanza a
+    JOIN (
+          SELECT config_file
+              , stanza
+              , backup_data->'database'->>'repo-key' AS repo
+              , backup_data->>'type' AS backup_type
+              , max(backup_data->'timestamp'->>'start') AS max_backup_start
+              , max(backup_data->'timestamp'->>'stop') AS max_backup_stop
+          FROM per_stanza
+          GROUP BY 1,2,3,4) b
+    ON a.config_file = b.config_file
+    AND a.stanza = b.stanza
+    AND a.backup_data->>'type' = b.backup_type
+    AND a.backup_data->'timestamp'->>'start' = b.max_backup_start
+    AND a.backup_data->'timestamp'->>'stop' = b.max_backup_stop;
 
 
 -- Restore dropped object privileges
