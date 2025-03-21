@@ -82,7 +82,6 @@ CREATE VIEW @extschema@.ccp_backrest_last_info AS
     , a.backup_data->'database'->>'repo-key' AS repo
     , a.backup_data->>'type' AS backup_type
     , a.backup_data->'info'->'repository'->>'delta' AS repo_backup_size_bytes
-    , a.backup_data->'info'->'repository'->>'size' AS repo_total_size_bytes
     , (a.backup_data->'timestamp'->>'stop')::bigint - (a.backup_data->'timestamp'->>'start')::bigint AS backup_runtime_seconds
     , CASE
        WHEN a.backup_data->>'error' = 'true' THEN 1
