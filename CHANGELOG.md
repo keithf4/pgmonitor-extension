@@ -1,3 +1,10 @@
+2.1.1
+=====
+FEATURES
+--------
+ - Reduce the logging of the dynamic background working runs to be DEBUG1. Changed existing DEBUG1 logging messages in the BGW to DEBUG2.
+
+
 2.1.0
 =====
 
