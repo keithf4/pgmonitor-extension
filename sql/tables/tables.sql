@@ -73,20 +73,6 @@ ALTER TABLE @extschema@.pg_hba_checksum SET (
     , autovacuum_vacuum_threshold = 10
     , autovacuum_analyze_threshold = 10);
 
-CREATE TABLE @extschema@.pg_settings_checksum (
-    settings_hash_generated text NOT NULL
-    , settings_hash_known_provided text
-    , settings_string text NOT NULL
-    , created_at timestamptz DEFAULT now() NOT NULL
-    , valid smallint NOT NULL );
-COMMENT ON COLUMN @extschema@.pg_settings_checksum.valid IS 'Set this column to zero if this group of settings is a valid change';
-CREATE INDEX ON @extschema@.pg_settings_checksum (created_at);
-ALTER TABLE @extschema@.pg_settings_checksum SET (
-    autovacuum_analyze_scale_factor = 0
-    , autovacuum_vacuum_scale_factor = 0
-    , autovacuum_vacuum_threshold = 10
-    , autovacuum_analyze_threshold = 10);
-
 CREATE TABLE @extschema@.pg_stat_statements_reset_info(
    reset_time timestamptz
 );
